@@ -138,10 +138,8 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .fold .x:hover{background:var(--panel2);color:var(--ink)}
 .fold-list{list-style:none;margin:0;padding:4px 6px 6px;overflow-y:auto;min-height:0}
 .fold-list>li{border-radius:8px}
-.fold-list>li.pick{box-shadow:inset 0 0 0 1px var(--accent)}
 .fold-list>li.hl{background:var(--hit-soft)}
-.fold-list>li.open{background:var(--panel2)}
-.fold-list>li.hl.open{background:rgba(249,226,175,.2)}
+.fold-list>li.pick{background:rgba(203,166,247,.22);box-shadow:inset 0 0 0 1px var(--accent)}
 .fold-list>li.dim>.fh{opacity:.5}
 .fh{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:8px;cursor:pointer;outline:none}
 .fh:hover,.fh:focus-visible{background:var(--panel2)}
@@ -150,20 +148,7 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .fold-list .nm small{display:block;font-size:.7rem;color:var(--muted)}
 .fold-list .ind{color:var(--muted);flex:none}
 .fold-list .ct{font:600 .95rem var(--display);font-variant-numeric:tabular-nums}
-.fh .chev{flex:none;width:14px;text-align:center;color:var(--muted);font-weight:800;transition:transform .18s}
-.fold-list>li.open .chev{transform:rotate(90deg)}
-/* expanded row: its monsters roll down under it; click one to select it */
-.fm{list-style:none;margin:0;padding:2px 6px 6px 14px;transform-origin:50% 0;animation:rowdown .18s ease-out}
-@keyframes rowdown{from{opacity:0;transform:scaleY(.7)}to{opacity:1;transform:none}}
-.fm li{display:flex;align-items:center;gap:6px;padding:2px 6px;border-radius:7px;cursor:pointer;outline:none;font-size:.8rem}
-.fm li:hover,.fm li:focus-visible{background:var(--line)}
-.fm li.hl{background:var(--hit-soft)}
-.fm li.dim{opacity:.45}
-.fm li.sel{box-shadow:inset 0 0 0 1px var(--hit)}
-.fm .mn{flex:1;min-width:0;font-weight:700}
-.fm .mc{font-weight:700;font-variant-numeric:tabular-nums;min-width:30px;text-align:right}
-.fm-empty{margin:0;padding:2px 14px 8px;font-size:.78rem;color:var(--muted)}
-@media (prefers-reduced-motion:reduce){.fold,.fm{animation:none}.fh .chev{transition:none}}
+@media (prefers-reduced-motion:reduce){.fold{animation:none}}
 .node:hover,.node:focus-visible,.node.on{border-color:var(--ink);background:var(--node-hover);transform:scale(1.25);box-shadow:0 0 0 2px var(--accent);outline:none}
 .map.loc .node{opacity:.35}
 .map.loc .node.hit{opacity:1;border-color:var(--ink);background:rgba(249,226,175,.5);box-shadow:0 0 0 3px var(--hit),0 0 14px 4px rgba(249,226,175,.75);animation:pulse 1.4s ease-in-out infinite}
@@ -324,10 +309,11 @@ function render(id,kind,pinned){
   return `${head}<div class="meta"><span>${lvRange(mobs)}</span>${HIDDEN[id]?`<span>Hidden · via ${esc(MOBS[HIDDEN[id]][0])}</span>`:''}</div>
   <table><thead><tr><th colspan="2">Monster</th><th>Level</th><th class="r">Spawns</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+// btn anchors the tooltip; a pinned tooltip shows the picked hidden map in place of btn's map
 function tipFor(btn,pinned){
-  const id=btn.dataset.id,k=KIDS[id]?.length;
-  const hint=pinned?(MOBS[id][1].length?'Click a monster to select it':''):(k?`${k} hidden map${k===1?'':'s'} · click to see them`:'');
-  tip.innerHTML=render(id,btn.dataset.kind,pinned)+(hint?`<p class="hint">${hint}</p>`:'');tip.hidden=false;
+  const id=pinned&&pick?pick:btn.dataset.id,k=KIDS[id]?.length;
+  const hint=pinned?[MOBS[id][1].length?'Click a monster to select it':'',pick?'Click the node to go back':''].filter(Boolean).join(' · '):(k?`${k} hidden map${k===1?'':'s'} · click to see them`:'');
+  tip.innerHTML=render(id,pick&&pinned?'field':btn.dataset.kind,pinned)+(hint?`<p class="hint">${hint}</p>`:'');tip.hidden=false;
   tip.classList.toggle('held',pinned);
   const W=map.clientWidth,H=map.clientHeight,x=+btn.dataset.x*W,y=+btn.dataset.y*H;
   const tw=tip.offsetWidth,th=tip.offsetHeight,pad=16;
@@ -369,7 +355,7 @@ const nodes=POS.map(([id,kind,x,y])=>{
   b.style.left=(x*100)+'%';b.style.top=(y*100)+'%';
   b.addEventListener('mouseenter',()=>show(b));b.addEventListener('mouseleave',hide);
   b.addEventListener('focus',()=>show(b));b.addEventListener('blur',hide);
-  b.addEventListener('click',()=>openId===id?closeFold():openFold(id));
+  b.addEventListener('click',()=>openId!==id?openFold(id):pick?pickMap(null):closeFold());
   map.appendChild(b);return b;
 });
 const nodeById=Object.fromEntries(nodes.map(b=>[b.dataset.id,b]));
@@ -378,13 +364,13 @@ document.addEventListener('touchstart',e=>{if(!e.target.closest('.node,.fold,.ti
 
 // ---- selecting a map: its tooltip stays up, and its hidden maps roll out above the node ----
 const fold=document.createElement('div');fold.className='fold';fold.hidden=true;map.appendChild(fold);
-let openId=null, pick=null, expanded=null; // openId: the selected drawn map; expanded: the hidden-map row showing its monsters
+let openId=null, pick=null; // openId: the selected drawn map; pick: its hidden map shown in the pinned tooltip instead
 const mapUrl=id=>'https://meowdb.com/msclassic/maps/'+id;
 const matchCount=id=>loc?MOBS[id][1].filter(m=>loc.mobs.has(m[0])).reduce((s,m)=>s+m[2],0):0;
-// id: drawn map to select; focus: one of its hidden maps to mark and expand
+// id: drawn map to select; focus: one of its hidden maps to show instead
 function openFold(id,focus){
   if(openId&&openId!==id){const o=nodeById[openId];o.classList.remove('open');o.setAttribute('aria-expanded','false')}
-  openId=id;pick=expanded=focus&&focus!==id?focus:null;
+  openId=id;pick=focus&&focus!==id?focus:null;
   const b=nodeById[id];b.classList.add('open');b.setAttribute('aria-expanded','true');
   renderFold(true);
   if(active)active.classList.remove('on');active=null;hide();
@@ -392,25 +378,18 @@ function openFold(id,focus){
 function closeFold(){
   if(!openId)return;
   const b=nodeById[openId];b.classList.remove('open');b.setAttribute('aria-expanded','false');
-  openId=pick=expanded=null;fold.hidden=true;hide();
+  openId=pick=null;fold.hidden=true;hide();
 }
-// an expanded row's monsters; clicking one selects it in the sidebar
-function mobRows(m){
-  const mobs=MOBS[m][1];
-  if(!mobs.length)return `<p class="fm-empty">No monsters spawn here.</p>`;
-  return `<ul class="fm">${mobs.map(([n,lv,c])=>{
-    const cls=[loc?(loc.mobs.has(n)?'hl':'dim'):'',isSel('mob',n)?'sel':''].join(' ');
-    return `<li tabindex="0" class="${cls}" data-m="${esc(n)}" title="Select ${esc(n)}">${art('spr',D.mobIds[n],26)}<span class="mn">${esc(n)}</span>${lvChip(lv)}<span class="mc">x${c}</span></li>`;
-  }).join('')}</ul>`;
-}
+// m: hidden map to show in the pinned tooltip, or null for the drawn map itself
+function pickMap(m){pick=m;renderFold(false)}
 // the selected map's hidden maps; a map without any shows no fold-out
 function renderFold(animate){
   const id=openId,kids=KIDS[id];
   if(!kids){fold.hidden=true;return}
   const scroll=animate?0:(fold.querySelector('.fold-list')?.scrollTop||0);
   const row=m=>{
-    const n=matchCount(m),d=DEPTH[m],open=m===expanded,cls=[loc?(n?'hl':'dim'):'',m===pick?'pick':'',open?'open':''].join(' ');
-    return `<li data-mid="${m}" class="${cls}"><div class="fh" tabindex="0" role="button" aria-expanded="${open}" style="padding-left:${6+(d-1)*14}px">${d>1?'<span class="ind">↳</span>':''}<span class="nm">${esc(MOBS[m][0])}<small>${lvRange(MOBS[m][1])}</small></span>${n?`<span class="ct">x${n}</span>`:''}<a class="web" href="${mapUrl(m)}" target="_blank" rel="noopener" title="Open on NiaMeowDB" aria-label="${esc(MOBS[m][0])} on NiaMeowDB">${GLOBE}</a><span class="chev" aria-hidden="true">›</span></div>${open?mobRows(m):''}</li>`;
+    const n=matchCount(m),d=DEPTH[m],on=m===pick,cls=[loc?(n?'hl':'dim'):'',on?'pick':''].join(' ');
+    return `<li data-mid="${m}" class="${cls}"><div class="fh" tabindex="0" role="button" aria-pressed="${on}" style="padding-left:${6+(d-1)*14}px">${d>1?'<span class="ind">↳</span>':''}<span class="nm">${esc(MOBS[m][0])}<small>${lvRange(MOBS[m][1])}</small></span>${n?`<span class="ct">x${n}</span>`:''}<a class="web" href="${mapUrl(m)}" target="_blank" rel="noopener" title="Open on NiaMeowDB" aria-label="${esc(MOBS[m][0])} on NiaMeowDB">${GLOBE}</a></div></li>`;
   };
   fold.innerHTML=`<div class="fold-head"><h3>Hidden maps<small>${kids.length} reached through ${esc(MOBS[id][0])}</small></h3><button class="x" type="button" aria-label="Close">×</button></div>
     <ul class="fold-list">${kids.map(row).join('')}</ul>`;
@@ -426,20 +405,16 @@ function renderFold(animate){
   if(animate){fold.style.animation='none';void fold.offsetWidth;fold.style.animation=''}
   fold.querySelector('.fold-list').scrollTop=scroll;
   fold.querySelector('.x').onclick=closeFold;
-  // a row's head toggles its monsters open (one row at a time)
+  // a row shows its map in the pinned tooltip; clicking it again goes back to the drawn map
   fold.querySelectorAll('.fh').forEach(h=>{
-    const m=h.parentElement.dataset.mid, toggle=()=>{expanded=expanded===m?null:m;renderFold(false)};
+    const m=h.parentElement.dataset.mid, toggle=()=>pickMap(pick===m?null:m);
     h.addEventListener('click',e=>{if(!e.target.closest('.web'))toggle()});
     h.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target===h){e.preventDefault();toggle()}});
   });
-  fold.querySelectorAll('.fm li').forEach(li=>{
-    li.addEventListener('click',()=>selectMob(li.dataset.m));
-    li.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectMob(li.dataset.m)}});
-  });
-  const o=fold.querySelector('li.open')||fold.querySelector('li.pick');if(o)o.scrollIntoView({block:'nearest'});
+  const o=fold.querySelector('li.pick');if(o)o.scrollIntoView({block:'nearest'});
   if(!active)hide(); // re-place the pinned tooltip around the resized fold-out
 }
-// a monster clicked in the fold-out or the pinned tooltip: select it in the sidebar's monster list
+// a monster clicked in the pinned tooltip: select it in the sidebar's monster list
 function selectMob(n){
   if(tab!=='mobs')setTab('mobs');
   locMob(n);renderList();
