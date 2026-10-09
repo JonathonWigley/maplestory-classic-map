@@ -125,7 +125,7 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .fold-head h3 small{display:block;font:700 .72rem var(--body);color:var(--muted)}
 .go{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--accent-ink);text-decoration:none}
 .go:hover{filter:brightness(1.08)}
-.go:focus-visible,.fold .x:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.go:focus-visible,.fold .x:focus-visible,.fold .grow:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .tip .hint{margin:6px 0 0;font-size:.72rem;font-weight:700;color:var(--accent)}
 /* pinned tooltip of the selected map: web button, clickable monsters */
 .tip-head{display:flex;align-items:center;gap:8px}
@@ -134,8 +134,12 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .tip.held tbody tr{cursor:pointer}
 .tip.held tbody tr:hover td{background:var(--panel2)}
 .tip.held tbody tr:hover td:first-child{border-radius:6px 0 0 6px}.tip.held tbody tr:hover td:last-child{border-radius:0 6px 6px 0}
-.fold .x{flex:none;width:26px;height:26px;border:0;border-radius:7px;background:none;color:var(--muted);font:800 1rem/1 var(--body);cursor:pointer}
-.fold .x:hover{background:var(--panel2);color:var(--ink)}
+.fold .x,.fold .grow{flex:none;width:26px;height:26px;border:0;border-radius:7px;background:none;color:var(--muted);font:800 1rem/1 var(--body);cursor:pointer}
+.fold .x:hover,.fold .grow:hover{background:var(--panel2);color:var(--ink)}
+/* expanded: full map height, rows flow into columns, no caret */
+.fold.big{width:min(600px,calc(100% - 16px))}
+.fold.big::after{display:none}
+.fold.big .fold-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));align-content:start;gap:2px 6px}
 .fold-list{list-style:none;margin:0;padding:4px 6px 6px;overflow-y:auto;min-height:0}
 .fold-list>li{border-radius:8px}
 .fold-list>li.hl{background:var(--hit-soft)}
@@ -364,7 +368,7 @@ document.addEventListener('touchstart',e=>{if(!e.target.closest('.node,.fold,.ti
 
 // ---- selecting a map: its tooltip stays up, and its hidden maps roll out above the node ----
 const fold=document.createElement('div');fold.className='fold';fold.hidden=true;map.appendChild(fold);
-let openId=null, pick=null; // openId: the selected drawn map; pick: its hidden map shown in the pinned tooltip instead
+let openId=null, pick=null, big=false; // openId: the selected drawn map; pick: its hidden map shown in the pinned tooltip instead; big: the fold-out is expanded
 const mapUrl=id=>'https://meowdb.com/msclassic/maps/'+id;
 const matchCount=id=>loc?MOBS[id][1].filter(m=>loc.mobs.has(m[0])).reduce((s,m)=>s+m[2],0):0;
 // id: drawn map to select; focus: one of its hidden maps to show instead
@@ -378,7 +382,7 @@ function openFold(id,focus){
 function closeFold(){
   if(!openId)return;
   const b=nodeById[openId];b.classList.remove('open');b.setAttribute('aria-expanded','false');
-  openId=pick=null;fold.hidden=true;hide();
+  openId=pick=null;big=false;fold.hidden=true;hide();
 }
 // m: hidden map to show in the pinned tooltip, or null for the drawn map itself
 function pickMap(m){pick=m;renderFold(false)}
@@ -391,20 +395,24 @@ function renderFold(animate){
     const n=matchCount(m),d=DEPTH[m],on=m===pick,cls=[loc?(n?'hl':'dim'):'',on?'pick':''].join(' ');
     return `<li data-mid="${m}" class="${cls}"><div class="fh" tabindex="0" role="button" aria-pressed="${on}" style="padding-left:${6+(d-1)*14}px">${d>1?'<span class="ind">↳</span>':''}<span class="nm">${esc(MOBS[m][0])}<small>${lvRange(MOBS[m][1])}</small></span>${n?`<span class="ct">x${n}</span>`:''}<a class="web" href="${mapUrl(m)}" target="_blank" rel="noopener" title="Open on NiaMeowDB" aria-label="${esc(MOBS[m][0])} on NiaMeowDB">${GLOBE}</a></div></li>`;
   };
-  fold.innerHTML=`<div class="fold-head"><h3>Hidden maps<small>${kids.length} reached through ${esc(MOBS[id][0])}</small></h3><button class="x" type="button" aria-label="Close">×</button></div>
+  fold.innerHTML=`<div class="fold-head"><h3>Hidden maps<small>${kids.length} reached through ${esc(MOBS[id][0])}</small></h3><button class="grow" type="button" aria-pressed="${big}" aria-label="${big?'Shrink list':'Expand list'}" title="${big?'Shrink':'Expand'}">${big?'⤡':'⤢'}</button><button class="x" type="button" aria-label="Close">×</button></div>
     <ul class="fold-list">${kids.map(row).join('')}</ul>`;
   fold.hidden=false;
   // above the node when there's room, else below; the caret tracks the node
   const W=map.clientWidth,H=map.clientHeight,b=nodeById[id],x=+b.dataset.x*W,y=+b.dataset.y*H,gap=20;
-  const below=y-gap<Math.min(260,H-y-gap);
-  fold.classList.toggle('below',below);
-  fold.style.maxHeight=Math.max(140,(below?H-y:y)-gap-8)+'px';
-  fold.style.top=below?(y+gap)+'px':'';fold.style.bottom=below?'':(H-y+gap)+'px';
+  const below=!big&&y-gap<Math.min(260,H-y-gap);
+  fold.classList.toggle('below',below);fold.classList.toggle('big',big);
+  fold.style.maxHeight=(big?H-16:Math.max(140,(below?H-y:y)-gap-8))+'px';
+  fold.style.top=big?'8px':below?(y+gap)+'px':'';fold.style.bottom=big||below?'':(H-y+gap)+'px';
   const fw=fold.offsetWidth,left=Math.max(4,Math.min(W-fw-4,x-fw/2));
   fold.style.left=left+'px';fold.style.setProperty('--cx',Math.max(16,Math.min(fw-16,x-left))+'px');
   if(animate){fold.style.animation='none';void fold.offsetWidth;fold.style.animation=''}
   fold.querySelector('.fold-list').scrollTop=scroll;
   fold.querySelector('.x').onclick=closeFold;
+  // the expand button only shows when the list doesn't fit
+  const list=fold.querySelector('.fold-list'),grow=fold.querySelector('.grow');
+  grow.hidden=!big&&list.scrollHeight<=list.clientHeight;
+  grow.onclick=()=>{big=!big;renderFold(false)};
   // a row shows its map in the pinned tooltip; clicking it again goes back to the drawn map
   fold.querySelectorAll('.fh').forEach(h=>{
     const m=h.parentElement.dataset.mid, toggle=()=>pickMap(pick===m?null:m);
