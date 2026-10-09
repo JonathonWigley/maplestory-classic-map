@@ -106,8 +106,11 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 /* "+N" chip on a lit node: how many matching hidden maps its fold-out holds */
 .map.loc .node.hit[data-more]::before{content:"+" attr(data-more);position:absolute;bottom:calc(100% - 6px);left:calc(100% - 6px);padding:0 5px;
   border-radius:999px;background:var(--hit);color:var(--hit-ink);font:800 .62rem/15px var(--body);white-space:nowrap;pointer-events:none;box-shadow:0 1px 4px var(--shadow)}
+/* door badge: this map has hidden maps behind it */
+.node .door{position:absolute;right:-8px;bottom:-8px;width:15px;height:15px;display:grid;place-items:center;border-radius:4px;
+  background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:0 1px 3px var(--shadow);pointer-events:none}
 .node.open{border-color:var(--accent);background:rgba(203,166,247,.35);box-shadow:0 0 0 3px var(--accent);opacity:1!important}
-/* fold-out: rolls up above the clicked node with its own map and the hidden maps reached through it */
+/* fold-out: the selected map's hidden maps, rolled up above its node */
 .fold{position:absolute;z-index:6;width:min(290px,90%);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);
   border-radius:12px;box-shadow:0 14px 34px var(--shadow);transform-origin:var(--cx,50%) 100%;animation:rollout .24s cubic-bezier(.2,.9,.25,1)}
 .fold.below{transform-origin:var(--cx,50%) 0}
@@ -120,13 +123,19 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .fold-head{display:flex;align-items:center;gap:8px;padding:10px 8px 9px 12px;border-bottom:1px solid var(--line)}
 .fold-head h3{flex:1;min-width:0;margin:0;font-family:var(--display);font-weight:600;font-size:1rem;line-height:1.2;text-wrap:balance}
 .fold-head h3 small{display:block;font:700 .72rem var(--body);color:var(--muted)}
-.fold .go{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:8px;background:var(--accent);color:var(--accent-ink);text-decoration:none}
+.go{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--accent-ink);text-decoration:none}
+.go:hover{filter:brightness(1.08)}
+.go:focus-visible,.fold .x:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .tip .hint{margin:6px 0 0;font-size:.72rem;font-weight:700;color:var(--accent)}
-.fold .go:hover{filter:brightness(1.08)}
-.fold .go:focus-visible,.fold .x:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+/* pinned tooltip of the selected map: web button, clickable monsters */
+.tip-head{display:flex;align-items:center;gap:8px}
+.tip-head h3{flex:1;min-width:0}
+.tip.held{pointer-events:auto;border-color:var(--accent)}
+.tip.held tbody tr{cursor:pointer}
+.tip.held tbody tr:hover td{background:var(--panel2)}
+.tip.held tbody tr:hover td:first-child{border-radius:6px 0 0 6px}.tip.held tbody tr:hover td:last-child{border-radius:0 6px 6px 0}
 .fold .x{flex:none;width:26px;height:26px;border:0;border-radius:7px;background:none;color:var(--muted);font:800 1rem/1 var(--body);cursor:pointer}
 .fold .x:hover{background:var(--panel2);color:var(--ink)}
-.fold-sec{padding:8px 12px 2px;font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .fold-list{list-style:none;margin:0;padding:4px 6px 6px;overflow-y:auto;min-height:0}
 .fold-list>li{border-radius:8px}
 .fold-list>li.pick{box-shadow:inset 0 0 0 1px var(--accent)}
@@ -282,6 +291,7 @@ const mobDrops=n=>new Set((D.drops[D.mobIds[n]]||[]).map(d=>d[0]));
 // ---- state ----
 let tab='mobs', query='', typeFilter='All', loc=null, sel=[]; // sel = [{kind:'mob'|'item', key, locked}]
 const GLOBE=`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.3"/><path d="M1.7 8h12.6M8 1.7c1.9 2 1.9 10.6 0 12.6M8 1.7c-1.9 2-1.9 10.6 0 12.6"/></svg>`;
+const DOOR=`<svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3.5 14.5V2.5h9v12"/><path d="M1.5 14.5h13"/><circle cx="10" cy="8.8" r="1" fill="currentColor" stroke="none"/></svg>`;
 const LOCKSVG13=`<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path class="sh-open" d="M5.5 7V4.5a2.5 2.5 0 0 1 4.9-.7"/><path class="sh-closed" d="M5.5 7V5a2.5 2.5 0 0 1 5 0V7"/></svg>`;
 const LOCK=(on,label)=>`<button class="lk" aria-pressed="${on}" title="${on?'Unlock':'Lock to keep selected'}" aria-label="${on?'Unlock':'Lock'} ${label}"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path class="sh-open" d="M5.5 7V4.5a2.5 2.5 0 0 1 4.9-.7"/><path class="sh-closed" d="M5.5 7V5a2.5 2.5 0 0 1 5 0V7"/></svg></button>`;
 const map=$('map');
@@ -289,10 +299,11 @@ const tip=document.createElement('div');tip.className='tip';tip.hidden=true;map.
 let active=null;
 
 // ---- tooltip ----
-function render(id,kind){
+// pinned: the clicked map's tooltip, which stays up with a web button and clickable monsters
+function render(id,kind,pinned){
   const [name,mobs]=MOBS[id];
-  const kindLabel={town:'Town',field:'Hunting spot',cluster:'Dungeon'}[kind];
-  if(!mobs.length) return `<h3>${esc(name)}</h3><p class="empty">${kind==='town'?'Safe town. No monsters spawn here.':'No field spawns listed. This area opens into separate dungeon instances.'}</p>`;
+  const head=`<div class="tip-head"><h3>${esc(name)}</h3>${pinned?`<a class="go" href="${mapUrl(id)}" target="_blank" rel="noopener" title="Open on NiaMeowDB" aria-label="${esc(name)} on NiaMeowDB">${GLOBE}</a>`:''}</div>`;
+  if(!mobs.length) return `${head}<p class="empty">${kind==='town'?'Safe town. No monsters spawn here.':'No field spawns listed. This area opens into separate dungeon instances.'}</p>`;
   const rows=mobs.map(([n,lv,c])=>{
     let cls='', extra='';
     if(loc){
@@ -300,23 +311,39 @@ function render(id,kind){
       cls=match?'hl':'dim';
       if(match){const dr=mobDrops(n);extra=loc.items.filter(k=>dr.has(+k)).map(k=>art('ico',items[k].icon,22)).join('')}
     }
-    return `<tr class="${cls}"><td class="s">${art('spr',D.mobIds[n],32)}</td><td class="n">${esc(n)}${extra}</td><td class="l">${lvChip(lv)}</td><td class="c">x${c}</td></tr>`;
+    return `<tr class="${cls}" data-m="${esc(n)}"><td class="s">${art('spr',D.mobIds[n],32)}</td><td class="n">${esc(n)}${extra}</td><td class="l">${lvChip(lv)}</td><td class="c">x${c}</td></tr>`;
   }).join('');
-  return `<h3>${esc(name)}</h3><div class="meta"><span>${lvRange(mobs)}</span>${HIDDEN[id]?`<span>Hidden · via ${esc(MOBS[HIDDEN[id]][0])}</span>`:''}</div>
+  return `${head}<div class="meta"><span>${lvRange(mobs)}</span>${HIDDEN[id]?`<span>Hidden · via ${esc(MOBS[HIDDEN[id]][0])}</span>`:''}</div>
   <table><thead><tr><th colspan="2">Monster</th><th>Level</th><th class="r">Spawns</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
-function show(btn){
-  if(active&&active!==btn)active.classList.remove('on');
-  active=btn;btn.classList.add('on');
-  const k=KIDS[btn.dataset.id]?.length;
-  tip.innerHTML=render(btn.dataset.id,btn.dataset.kind)+(k?`<p class="hint">${k} hidden map${k===1?'':'s'} · click to see them</p>`:'');tip.hidden=false;
+function tipFor(btn,pinned){
+  const id=btn.dataset.id,k=KIDS[id]?.length;
+  const hint=pinned?(MOBS[id][1].length?'Click a monster to select it':''):(k?`${k} hidden map${k===1?'':'s'} · click to see them`:'');
+  tip.innerHTML=render(id,btn.dataset.kind,pinned)+(hint?`<p class="hint">${hint}</p>`:'');tip.hidden=false;
+  tip.classList.toggle('held',pinned);
   const W=map.clientWidth,H=map.clientHeight,x=+btn.dataset.x*W,y=+btn.dataset.y*H;
   const tw=tip.offsetWidth,th=tip.offsetHeight,pad=16;
   let left=x+pad; if(left+tw>W) left=x-pad-tw; if(left<0) left=Math.max(0,Math.min(W-tw,x-tw/2));
   let top=Math.max(4,Math.min(H-th-4,y-th/2)); if(th>H)top=0;
+  if(pinned&&!fold.hidden){
+    // keep clear of the fold-out: grow away from it, else step beside it
+    top=fold.classList.contains('below')?Math.max(4,y+14-th):Math.max(4,Math.min(y-14,H-th-4));
+    const fl=fold.offsetLeft,fr=fl+fold.offsetWidth,ft=fold.offsetTop,fb=ft+fold.offsetHeight;
+    if(left<fr&&left+tw>fl&&top<fb&&top+th>ft){if(fr+8+tw<=W)left=fr+8;else if(fl-8-tw>=0)left=fl-8-tw}
+  }
   tip.style.left=left+'px';tip.style.top=top+'px';
 }
-function hide(){tip.hidden=true;if(active)active.classList.remove('on');active=null}
+function show(btn){
+  if(active&&active!==btn)active.classList.remove('on');
+  active=btn;btn.classList.add('on');
+  tipFor(btn,btn.dataset.id===openId);
+}
+// drops a hover tooltip; the clicked map's pinned tooltip comes back in its place
+function hide(){
+  if(active)active.classList.remove('on');active=null;
+  if(openId)tipFor(nodeById[openId],true);else{tip.hidden=true;tip.classList.remove('held')}
+}
+tip.addEventListener('click',e=>{const tr=e.target.closest('tr[data-m]');if(tr&&tip.classList.contains('held'))selectMob(tr.dataset.m)});
 
 // ---- hidden maps: indexed by the drawn map they're reached through ----
 const ROOT={}, DEPTH={}, CHILD={}, KIDS={};
@@ -329,34 +356,35 @@ const nodes=POS.map(([id,kind,x,y])=>{
   const b=document.createElement('button');b.type='button';
   b.addEventListener('animationend',e=>{if(e.animationName==='ping')b.classList.remove('ping')});
   b.className='node '+kind;Object.assign(b.dataset,{id,kind,x,y});
-  const k=KIDS[id]?.length;if(k)b.dataset.kids=k;
+  const k=KIDS[id]?.length;if(k){b.dataset.kids=k;b.insertAdjacentHTML('beforeend',`<span class="door" aria-hidden="true">${DOOR}</span>`)}
   b.setAttribute('aria-label',MOBS[id][0]+(k?`, ${k} hidden map${k===1?'':'s'}`:''));b.setAttribute('aria-expanded','false');
   b.style.left=(x*100)+'%';b.style.top=(y*100)+'%';
-  b.addEventListener('mouseenter',()=>{if(openId!==id)show(b)});b.addEventListener('mouseleave',hide);
-  b.addEventListener('focus',()=>{if(openId!==id)show(b)});b.addEventListener('blur',hide);
+  b.addEventListener('mouseenter',()=>show(b));b.addEventListener('mouseleave',hide);
+  b.addEventListener('focus',()=>show(b));b.addEventListener('blur',hide);
   b.addEventListener('click',()=>openId===id?closeFold():openFold(id));
   map.appendChild(b);return b;
 });
 const nodeById=Object.fromEntries(nodes.map(b=>[b.dataset.id,b]));
 const nodeFor=m=>nodeById[rootOf(m)];
-document.addEventListener('touchstart',e=>{if(!e.target.closest('.node,.fold'))hide()},{passive:true});
+document.addEventListener('touchstart',e=>{if(!e.target.closest('.node,.fold,.tip'))hide()},{passive:true});
 
-// ---- fold-out: the clicked map plus its hidden maps, rolled out above the node ----
+// ---- selecting a map: its tooltip stays up, and its hidden maps roll out above the node ----
 const fold=document.createElement('div');fold.className='fold';fold.hidden=true;map.appendChild(fold);
-let openId=null, pick=null, expanded=null; // expanded: the row showing its monsters
+let openId=null, pick=null, expanded=null; // openId: the selected drawn map; expanded: the hidden-map row showing its monsters
 const mapUrl=id=>'https://meowdb.com/msclassic/maps/'+id;
 const matchCount=id=>loc?MOBS[id][1].filter(m=>loc.mobs.has(m[0])).reduce((s,m)=>s+m[2],0):0;
-// id: drawn map to open; focus: the row to mark and expand (that map or one of its hidden maps)
+// id: drawn map to select; focus: one of its hidden maps to mark and expand
 function openFold(id,focus){
   if(openId&&openId!==id){const o=nodeById[openId];o.classList.remove('open');o.setAttribute('aria-expanded','false')}
-  hide();openId=id;pick=expanded=focus||null;
+  openId=id;pick=expanded=focus&&focus!==id?focus:null;
   const b=nodeById[id];b.classList.add('open');b.setAttribute('aria-expanded','true');
-  renderFold(true);
+  if(KIDS[id])renderFold(true);else fold.hidden=true;
+  if(active)active.classList.remove('on');active=null;hide();
 }
 function closeFold(){
   if(!openId)return;
   const b=nodeById[openId];b.classList.remove('open');b.setAttribute('aria-expanded','false');
-  openId=pick=expanded=null;fold.hidden=true;
+  openId=pick=expanded=null;fold.hidden=true;hide();
 }
 // an expanded row's monsters; clicking one selects it in the sidebar
 function mobRows(m){
@@ -368,14 +396,14 @@ function mobRows(m){
   }).join('')}</ul>`;
 }
 function renderFold(animate){
-  const id=openId,[name,mobs]=MOBS[id],kids=KIDS[id]||[];
-  const scroll=animate?[]:[...fold.querySelectorAll('.fold-list')].map(u=>u.scrollTop);
+  const id=openId,kids=KIDS[id];
+  const scroll=animate?0:(fold.querySelector('.fold-list')?.scrollTop||0);
   const row=m=>{
-    const n=matchCount(m),d=DEPTH[m]||0,open=m===expanded,cls=[loc?(n?'hl':'dim'):'',m===pick?'pick':'',open?'open':''].join(' ');
-    return `<li data-mid="${m}" class="${cls}"><div class="fh" tabindex="0" role="button" aria-expanded="${open}" style="padding-left:${6+Math.max(0,d-1)*14}px">${d>1?'<span class="ind">↳</span>':''}<span class="nm">${esc(MOBS[m][0])}<small>${lvRange(MOBS[m][1])}${m===id?' · this map':''}</small></span>${n?`<span class="ct">x${n}</span>`:''}${m===id?'':`<a class="web" href="${mapUrl(m)}" target="_blank" rel="noopener" title="Open on NiaMeowDB" aria-label="${esc(MOBS[m][0])} on NiaMeowDB">${GLOBE}</a>`}<span class="chev" aria-hidden="true">›</span></div>${open?mobRows(m):''}</li>`;
+    const n=matchCount(m),d=DEPTH[m],open=m===expanded,cls=[loc?(n?'hl':'dim'):'',m===pick?'pick':'',open?'open':''].join(' ');
+    return `<li data-mid="${m}" class="${cls}"><div class="fh" tabindex="0" role="button" aria-expanded="${open}" style="padding-left:${6+(d-1)*14}px">${d>1?'<span class="ind">↳</span>':''}<span class="nm">${esc(MOBS[m][0])}<small>${lvRange(MOBS[m][1])}</small></span>${n?`<span class="ct">x${n}</span>`:''}<a class="web" href="${mapUrl(m)}" target="_blank" rel="noopener" title="Open on NiaMeowDB" aria-label="${esc(MOBS[m][0])} on NiaMeowDB">${GLOBE}</a><span class="chev" aria-hidden="true">›</span></div>${open?mobRows(m):''}</li>`;
   };
-  fold.innerHTML=`<div class="fold-head"><h3>${esc(name)}<small>${lvRange(mobs)}${kids.length?` · ${kids.length} hidden map${kids.length===1?'':'s'}`:''}</small></h3><a class="go" href="${mapUrl(id)}" target="_blank" rel="noopener" title="Open on NiaMeowDB" aria-label="${esc(name)} on NiaMeowDB">${GLOBE}</a><button class="x" type="button" aria-label="Close">×</button></div>
-    <ul class="fold-list">${row(id)}</ul>${kids.length?`<div class="fold-sec">Hidden maps</div><ul class="fold-list">${kids.map(row).join('')}</ul>`:''}`;
+  fold.innerHTML=`<div class="fold-head"><h3>Hidden maps<small>${kids.length} reached through ${esc(MOBS[id][0])}</small></h3><button class="x" type="button" aria-label="Close">×</button></div>
+    <ul class="fold-list">${kids.map(row).join('')}</ul>`;
   fold.hidden=false;
   // above the node when there's room, else below; the caret tracks the node
   const W=map.clientWidth,H=map.clientHeight,b=nodeById[id],x=+b.dataset.x*W,y=+b.dataset.y*H,gap=20;
@@ -386,7 +414,7 @@ function renderFold(animate){
   const fw=fold.offsetWidth,left=Math.max(4,Math.min(W-fw-4,x-fw/2));
   fold.style.left=left+'px';fold.style.setProperty('--cx',Math.max(16,Math.min(fw-16,x-left))+'px');
   if(animate){fold.style.animation='none';void fold.offsetWidth;fold.style.animation=''}
-  fold.querySelectorAll('.fold-list').forEach((u,i)=>{if(scroll[i])u.scrollTop=scroll[i]});
+  fold.querySelector('.fold-list').scrollTop=scroll;
   fold.querySelector('.x').onclick=closeFold;
   // a row's head toggles its monsters open (one row at a time)
   fold.querySelectorAll('.fh').forEach(h=>{
@@ -399,14 +427,16 @@ function renderFold(animate){
     li.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectMob(li.dataset.m)}});
   });
   const o=fold.querySelector('li.open')||fold.querySelector('li.pick');if(o)o.scrollIntoView({block:'nearest'});
+  if(!active)hide(); // re-place the pinned tooltip around the resized fold-out
 }
-// a monster clicked in the fold-out: select it in the sidebar's monster list
+// a monster clicked in the fold-out or the pinned tooltip: select it in the sidebar's monster list
 function selectMob(n){
   if(tab!=='mobs')setTab('mobs');
   locMob(n);renderList();
   const r=[...$('list').querySelectorAll('.row')].find(x=>x.dataset.m===n);if(r)r.scrollIntoView({block:'nearest'});
 }
-map.addEventListener('click',e=>{if(!e.target.closest('.fold,.node'))closeFold()});
+// a click on empty map clears the selection; the path is checked because re-renders detach the clicked element
+map.addEventListener('click',e=>{if(!e.composedPath().some(n=>n===fold||n===tip||n.classList?.contains('node')))closeFold()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeFold()});
 addEventListener('resize',()=>{if(openId)renderFold(false)});
 
@@ -426,7 +456,7 @@ function setLoc(next){
   if(next)rankFolded=false;
   pinned=new Set();spotlight(savedMaps);
   renderRank();
-  if(active)show(active);
+  if(active)show(active);else hide();
 }
 
 // ---- ranking panel ----
