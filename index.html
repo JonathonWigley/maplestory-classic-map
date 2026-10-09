@@ -142,6 +142,7 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .rk-num small{display:block;font:700 .66rem var(--body);color:var(--muted);letter-spacing:.04em}
 .rk-who{grid-column:1/3;display:flex;flex-wrap:wrap;gap:2px 10px;font-size:.74rem;color:var(--muted);align-items:center}
 .rk-who span.m{display:inline-flex;align-items:center;gap:3px}
+.rk-lv{display:block;font:700 .72rem var(--body);color:var(--muted);margin-top:1px}
 .rank-tab{position:fixed;right:0;top:120px;z-index:15;writing-mode:vertical-rl;border:1px solid var(--line);border-right:0;
   background:var(--panel);color:var(--ink);border-radius:8px 0 0 8px;padding:12px 6px;font:700 .8rem var(--body);cursor:pointer;box-shadow:0 4px 14px var(--shadow)}
 .map.solo .node.hit:not(.focus){transform:scale(.72);animation:none}
@@ -348,7 +349,8 @@ function renderRank(){
     const who=mobs.filter(m=>loc.mobs.has(m[0]));
     if(!who.length)continue;
     const n=who.reduce((s,m)=>s+m[2],0);
-    rows.push({mid,name,n,pct:Math.round(n/total*100),who});
+    const lvs=mobs.map(m=>m[1]);
+    rows.push({mid,name,n,pct:Math.round(n/total*100),who,lv:`Lv ${Math.min(...lvs)}–${Math.max(...lvs)}`});
   }
   rows.sort((a,b)=>b.n-a.n||b.pct-a.pct);
   spotlight(savedMaps);
@@ -360,9 +362,9 @@ function renderRank(){
     ? `Maps with the most spawns of ${sel.every(x=>x.kind==='item')?'monsters that drop':'monsters matching'} ${what}. Exact drop rates aren't published, so more droppers means more chances.`
     : `Maps ranked by how many ${what} spawn there${sel.length>1?' combined':''}.`;
   $('rankList').innerHTML=rows.map(r=>`<li tabindex="0" data-mid="${r.mid}">
-      <span class="rk-name" title="${esc(r.name)}">${LOCK(savedMaps.has(r.mid),esc(r.name))}<span>${esc(r.name)}</span></span>
+      <span class="rk-name" title="${esc(r.name)}">${LOCK(savedMaps.has(r.mid),esc(r.name))}<span>${esc(r.name)}<small class="rk-lv">${r.lv} map</small></span></span>
       <span class="rk-num">x${r.n}<small>${r.pct}% of map</small></span>
-      <span class="rk-who">${isItem?r.who.map(([n,lv,c])=>`<span class="m">${art('spr',D.mobIds[n],18)}${esc(n)} x${c}</span>`).join(''):`Lv ${MOBS[r.mid][1].map(m=>m[1]).reduce((a,b)=>Math.min(a,b))}–${MOBS[r.mid][1].map(m=>m[1]).reduce((a,b)=>Math.max(a,b))} map`}</span>
+      ${isItem?`<span class="rk-who">${r.who.map(([n,lv,c])=>`<span class="m">${art('spr',D.mobIds[n],18)}${esc(n)} x${c}</span>`).join('')}</span>`:''}
     </li>`).join('');
   $('rankList').querySelectorAll('li').forEach(li=>{
     const b=nodeById[li.dataset.mid];
