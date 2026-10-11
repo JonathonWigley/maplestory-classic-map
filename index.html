@@ -199,6 +199,11 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .qchar label{display:grid;gap:3px;font:800 .64rem var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .qchar input,.qchar select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font:700 .85rem var(--body)}
 .qchar select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.qtabs{padding:0;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.qtabs .tab{flex:none;padding:7px 18px}
+.qvars{margin:0 0 4px 38px;border-left:2px solid var(--line);padding-left:6px}
+.qlt{display:grid;gap:8px}
+.qlt[hidden]{display:none}
 .qfl{font:800 .64rem var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:-4px}
 /* switch that hides quests the character can't take yet */
 .qtoggle{display:flex;align-items:center;gap:10px;cursor:pointer;font:800 .82rem var(--body)}
@@ -327,10 +332,12 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
       </div>
       <label class="qtoggle"><input type="checkbox" id="qHideLocked" role="switch"><span>Only quests I can take</span></label>
       <input id="qq" type="search" placeholder="Search quests, NPCs, monsters, items" autocomplete="off">
-      <div class="qfl">Show</div>
-      <div class="filters" id="qStatus" aria-label="Show quests that are"></div>
-      <div class="qfl">Group by</div>
-      <div class="filters" id="qGroup" aria-label="Group quests by"></div>
+      <div class="qlt" id="qListTools">
+        <div class="qfl">Show</div>
+        <div class="filters" id="qStatus" aria-label="Show quests that are"></div>
+        <div class="qfl">Group by</div>
+        <div class="filters" id="qGroup" aria-label="Group quests by"></div>
+      </div>
     </div>
     <p class="rank-sub" id="qCount"></p>
   </aside>
@@ -338,8 +345,12 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
     <header>
       <button class="icon-btn open-side" id="qOpenSide" aria-label="Open filters">☰</button>
       <h1>Quests</h1>
-      <span class="sub">Set your level and job to see what you can unlock · click the circle to mark a quest in progress or done</span>
+      <span class="sub" id="qSub"></span>
     </header>
+    <div class="tabs qtabs" role="tablist">
+      <button class="tab" role="tab" id="qtab-list" aria-selected="true">Quest list</button>
+      <button class="tab" role="tab" id="qtab-rep" aria-selected="false">Daily &amp; weekly</button>
+    </div>
     <div class="qlist" id="qList"></div>
     <p class="foot">Quest and NPC data from <a href="https://meowdb.com/msclassic/quest-tracker/all" target="_blank" rel="noopener">NiaMeowDB</a> (MapleStory Classic), pulled Oct 2026. Progress is saved in this browser only. Daily quests reset at 00:00 UTC, weekly ones on Monday.</p>
   </div>
@@ -761,13 +772,30 @@ let qProg=store.get('msc-quest-progress',{}); // quest id -> {s:'active'|'done',
 let qHideLocked=store.get('msc-quest-hide-locked',true);
 let qGroup=store.get('msc-quest-group','line');
 let qQuery='', qStatuses=new Set(['avail','active']), qOpen=null;
+let qTab=store.get('msc-quest-tab','list'), qRepOpen=null;
+// Citizenship and Crafting repeats leave the quest list for the Daily & weekly checklist.
+// A town's Community Board is taken to offer one greeting a day and one donation a week (meowdb doesn't say),
+// so each becomes one slot checked off as a whole; crafting repeats each have their own NPC and stay separate.
+const REP_AREAS=new Set([19,20]), REPS=[], repOf={};
+for(const q of QUESTS){
+  if(!REP_AREAS.has(q.area)||!(q.isDaily||q.isWeekly))continue;
+  const town=q.citizenshipReq?.town, weekly=!!q.isWeekly, key=town?`slot:${town}:${weekly?'weekly':'daily'}`:q.id;
+  let r=REPS.find(x=>x.key===key);
+  if(!r)REPS.push(r={key,weekly,town,title:town?`${town} ${weekly?'donation':'greeting'}`:q.name,npc:q.npc,quests:[]});
+  r.quests.push(q);repOf[q.id]=r;
+}
+const repByKey=Object.fromEntries(REPS.map(r=>[r.key,r]));
+// progress is kept per slot for slotted quests, per quest for the rest
+const trackKey=id=>repOf[id]?.key||id;
 // daily quests reset at 00:00 UTC, weekly ones at 00:00 UTC on Monday
 const lastReset=weekly=>{const d=new Date();d.setUTCHours(0,0,0,0);if(weekly)d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return +d};
+const untilReset=weekly=>{const m=Math.ceil((lastReset(weekly)+(weekly?7:1)*864e5-Date.now())/6e4),d=Math.floor(m/1440),h=Math.floor(m%1440/60);
+  return d?`${d}d ${h}h`:h?`${h}h ${m%60}m`:`${m}m`};
 function expireRepeats(){
   let changed=false;
   for(const [id,p] of Object.entries(qProg)){
-    const q=questById[id];
-    if(q&&p.s==='done'&&((q.isDaily&&p.t<lastReset(false))||(q.isWeekly&&p.t<lastReset(true)))){delete qProg[id];changed=true}
+    const r=repByKey[id], q=questById[id], weekly=r?r.weekly:!!q?.isWeekly, repeats=r||q?.isDaily||q?.isWeekly;
+    if(repeats&&p.s==='done'&&p.t<lastReset(weekly)){delete qProg[id];changed=true}
   }
   if(changed)store.set('msc-quest-progress',qProg);
 }
@@ -777,11 +805,11 @@ function setQState(id,s){
   store.set('msc-quest-progress',qProg);renderQuests();
 }
 // why the character can't take a quest yet; empty when it can
-function lockReasons(q){
+function lockReasons(q,{prereq=true}={}){
   const r=[],lv=+qChar.lv;
   if(lv&&q.levelMin>lv)r.push(`Needs Lv ${q.levelMin}`);
   if(qChar.job&&q.jobReq&&!q.jobReq.includes(qChar.job))r.push(`${q.jobReq.join('/')} only`);
-  const pre=(q.requiresAll||[]).filter(p=>qState(p)!=='done');
+  const pre=prereq?(q.requiresAll||[]).filter(p=>qState(p)!=='done'):[];
   if(pre.length)r.push(`After ${pre.map(p=>questById[p]?.name||`quest ${p}`).join(', ')}`);
   if(q.citizenshipReq&&+qChar.grade<q.citizenshipReq.grade)r.push(`Citizen grade ${q.citizenshipReq.grade}`);
   if(q.endDate&&Date.parse(q.endDate)<Date.now())r.push('Event over');
@@ -808,7 +836,7 @@ const Q_NEXT={'':'active',active:'done',done:''}, Q_LABEL={'':'Not started',acti
 const qStBtn=q=>{const s=qState(q.id);return `<button class="qst" data-s="${s}" title="${Q_LABEL[s]} · click for ${Q_LABEL[Q_NEXT[s]].toLowerCase()}" aria-label="${esc(q.name)}: ${Q_LABEL[s]}">${s==='done'?'✓':''}</button>`};
 
 function renderQuestFilters(){
-  const vis=QUESTS.filter(qVisible),count=k=>vis.filter(q=>qStatusOf(q)===k).length;
+  const vis=QUESTS.filter(q=>qVisible(q)&&!repOf[q.id]),count=k=>vis.filter(q=>qStatusOf(q)===k).length;
   $('qStatus').innerHTML=QSTATUS.map(([k,l])=>`<button class="chip-f" aria-pressed="${qStatuses.has(k)}" data-k="${k}">${l} ${count(k)}</button>`).join('');
   $('qGroup').innerHTML=QGROUPS.map(([k,l])=>`<button class="chip-f" aria-pressed="${k===qGroup}" data-k="${k}">${l}</button>`).join('');
 }
@@ -820,7 +848,7 @@ function qRow(q,sub){
 }
 const chainSize=c=>QUESTS.filter(x=>chainOf(x)===c).length;
 const qStepText=q=>{const n=chainSize(chainOf(q));return n>1?`step ${stepOf(q)} of ${n}`:''};
-const qSection=(title,n,body)=>`<section class="qarea"><h2>${esc(title)}<small>${n}</small></h2>${body}</section>`;
+const qSection=(title,n,body)=>`<section class="qarea"><h2>${esc(title)}<small>${esc(n)}</small></h2>${body}</section>`;
 // area -> chain -> quests in step order; chains ordered by their lowest level
 function questsByLine(shown){
   let html='';
@@ -843,13 +871,48 @@ function questsByTown(shown){
     `<div class="qchain">${qs.sort((x,y)=>x.levelMin-y.levelMin||chainOf(x).localeCompare(chainOf(y))||stepOf(x)-stepOf(y))
       .map(q=>qRow(q,[q.npc,chainSize(chainOf(q))>1?`${chainOf(q)} ${qStepText(q)}`:''].filter(Boolean).join(' · '))).join('')}</div>`)).join('');
 }
+// ---- daily & weekly checklist ----
+const repVariants=r=>r.town?r.quests.map(q=>[q,lockReasons(q,{prereq:false})]):r.quests.map(q=>[q,lockReasons(q)]);
+// a slot is open when any variant is; otherwise it shows the reasons of the closest one
+const repLocks=r=>{const v=repVariants(r);return v.some(([,w])=>!w.length)?[]:v.map(([,w])=>w).sort((a,b)=>a.length-b.length)[0]};
+const repDone=r=>qState(r.key)==='done';
+const repVisible=r=>(!r.town||r.town===qChar.town)&&!(qHideLocked&&repLocks(r).length);
+const repNeeds=q=>(q.need||[]).map(n=>needMob(n)?`Defeat ${n.count} ${needMob(n)}`:`${n.count} ${n.name}`).join(', ')||(q.completeNpc&&q.completeNpc!==q.npc?`Talk to ${q.completeNpc}`:'');
+function repRow(r){
+  const why=repLocks(r),done=repDone(r),v=repVariants(r).filter(([,w])=>!qHideLocked||!w.length);
+  const sub=r.town?`${r.npc} · one of ${v.length}${r.weekly?' donations':' greetings'}`:[r.npc,repNeeds(r.quests[0])].join(' · ');
+  const open=r.town&&qRepOpen===r.key, on=r.town?open:r.quests[0].id===qOpen;
+  let h=`<div class="qrow${why.length&&!done?' locked':''}${on?' on':''}" data-rep="${esc(r.key)}" role="button" tabindex="0"${r.town?` aria-expanded="${open}"`:''}>
+    <button class="qst" data-s="${done?'done':''}" title="${done?'Done':'Not done'} · click to mark ${done?'not done':'done'}" aria-label="${esc(r.title)}: ${done?'done':'not done'}">${done?'✓':''}</button>
+    <div class="qtxt"><div class="nm">${esc(r.title)}${r.town?' <span class="sm">'+(open?'▾':'▸')+'</span>':''}</div><div class="sm">${esc(sub)}</div>
+    ${why.length&&!done?`<div class="qwhy">${esc(why.join(' · '))}</div>`:''}</div>${lvChip(Math.min(...r.quests.map(q=>q.levelMin)))}</div>`;
+  if(open)h+=`<div class="qvars">${v.map(([q,w])=>`<div class="qrow${w.length?' locked':''}${q.id===qOpen?' on':''}" data-q="${q.id}" role="button" tabindex="0"><span></span>
+    <div class="qtxt"><div class="nm">${esc(q.name)}</div><div class="sm">${esc(repNeeds(q))}</div>${w.length?`<div class="qwhy">${esc(w.join(' · '))}</div>`:''}</div>${lvChip(q.levelMin)}</div>`).join('')}</div>`;
+  return h;
+}
+function repeatsHtml(qs){
+  const shown=REPS.filter(r=>repVisible(r)&&(!qs||r.title.toLowerCase().includes(qs)||r.quests.some(q=>qText(q).includes(qs))));
+  $('qCount').textContent=`${shown.length} repeat${shown.length===1?'':'s'} shown`;
+  return [[false,'Daily'],[true,'Weekly']].map(([weekly,title])=>{
+    const rs=shown.filter(r=>r.weekly===weekly).sort((a,b)=>!!b.town-!!a.town);if(!rs.length)return '';
+    return qSection(title,`${rs.filter(repDone).length}/${rs.length} done · resets in ${untilReset(weekly)}`,`<div class="qchain">${rs.map(repRow).join('')}</div>`);
+  }).join('');
+}
+function toggleRep(key){const r=repByKey[key];if(r.town){qRepOpen=qRepOpen===key?null:key;renderQuests()}else openQuest(r.quests[0].id)}
+const Q_SUB={list:'Set your level and job to see what you can unlock · click the circle to mark a quest in progress or done',
+  rep:'Citizenship and crafting repeats · check one off when it\'s done; it clears at the next reset'};
+function setQTab(t){
+  qTab=t;store.set('msc-quest-tab',t);
+  $('qtab-list').setAttribute('aria-selected',t==='list');$('qtab-rep').setAttribute('aria-selected',t==='rep');
+  $('qListTools').hidden=t!=='list';$('qSub').textContent=Q_SUB[t];renderQuests();
+}
 function renderQuests(){
   expireRepeats();renderQuestFilters();
   const qs=qQuery.trim().toLowerCase();
   // locked quests pass here only when the switch lets them through qVisible
-  const shown=QUESTS.filter(q=>{const st=qStatusOf(q);return qVisible(q)&&(st==='locked'||qStatuses.has(st))&&(!qs||qText(q).includes(qs))});
-  $('qCount').textContent=`${shown.length} quest${shown.length===1?'':'s'} shown`;
-  const html=qGroup==='town'?questsByTown(shown):questsByLine(shown);
+  const shown=QUESTS.filter(q=>{const st=qStatusOf(q);return qVisible(q)&&!repOf[q.id]&&(st==='locked'||qStatuses.has(st))&&(!qs||qText(q).includes(qs))});
+  if(qTab==='list')$('qCount').textContent=`${shown.length} quest${shown.length===1?'':'s'} shown`;
+  const html=qTab==='rep'?repeatsHtml(qs):qGroup==='town'?questsByTown(shown):questsByLine(shown);
   $('qList').innerHTML=html||`<p class="empty-l">No quests match these filters.</p>`;
   renderQuestDetail();
 }
@@ -868,10 +931,11 @@ function renderQuestDetail(){
   const P=$('qDetail'),B=$('qBody');
   P.hidden=matchMedia('(max-width:820px)').matches&&!qOpen;
   if(!qOpen){$('qTitle').textContent='Quest details';B.innerHTML='<p class="rank-sub">Pick a quest to see who gives it, what it needs and what it pays.</p>';return}
-  const q=questById[qOpen],s=qState(q.id),why=lockReasons(q),h=[];
+  const q=questById[qOpen],r=repOf[q.id],s=qState(trackKey(q.id)),why=lockReasons(q,{prereq:!r?.town}),h=[];
   $('qTitle').textContent=q.name;
   h.push(`<div class="meta"><span>${esc(QAREAS[q.area])}</span>${q.parent&&q.parent!==q.name?`<span>${esc(q.parent)}</span>`:''}</div><div>${qBadges(q)}</div>`);
-  h.push(`<div class="qset">${['','active','done'].map(k=>`<button class="btn" data-set="${k}" aria-pressed="${s===k}">${Q_LABEL[k]}</button>`).join('')}</div>`);
+  if(r?.town)h.push(`<p class="sm">Tracked in Daily &amp; weekly as the ${esc(r.title)}: marking it done covers whichever of its ${r.quests.length} variants the board gave.</p>`);
+  h.push(`<div class="qset">${(r?['','done']:['','active','done']).map(k=>`<button class="btn" data-set="${k}" aria-pressed="${s===k}">${Q_LABEL[k]}</button>`).join('')}</div>`);
   if(why.length&&!s)h.push(`<p class="qwhy">${esc(why.join(' · '))}</p>`);
   // who serves it
   h.push(`<h3>Who</h3><ul>${q.npc?qNpc('Start',q.npc):'<li>Starts on its own</li>'}${q.completeNpc&&q.completeNpc!==q.npc?qNpc('Turn in',q.completeNpc):''}</ul>`);
@@ -917,13 +981,16 @@ const findMap=id=>showOnMap(()=>{ping(nodeFor(id));openFold(rootOf(id),id)});
 // ---- quest view events ----
 $('qList').addEventListener('click',e=>{
   const row=e.target.closest('.qrow');if(!row)return;
-  if(e.target.closest('.qst'))setQState(row.dataset.q,Q_NEXT[qState(row.dataset.q)]);else openQuest(row.dataset.q);
+  const k=row.dataset.rep;
+  if(e.target.closest('.qst'))k?setQState(k,repDone(repByKey[k])?'':'done'):setQState(row.dataset.q,Q_NEXT[qState(row.dataset.q)]);
+  else k?toggleRep(k):openQuest(row.dataset.q);
 });
-$('qList').addEventListener('keydown',e=>{const row=e.target.closest('.qrow');if(row&&e.target===row&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openQuest(row.dataset.q)}});
+$('qList').addEventListener('keydown',e=>{const row=e.target.closest('.qrow');if(row&&e.target===row&&(e.key==='Enter'||e.key===' ')){e.preventDefault();row.dataset.rep?toggleRep(row.dataset.rep):openQuest(row.dataset.q)}});
+$('qtab-list').onclick=()=>setQTab('list');$('qtab-rep').onclick=()=>setQTab('rep');
 $('qBody').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;const d=b.dataset;
   if(b.classList.contains('qst'))setQState(b.nextElementSibling.dataset.quest,Q_NEXT[qState(b.nextElementSibling.dataset.quest)]);
-  else if(d.set!=null)setQState(qOpen,d.set);
+  else if(d.set!=null)setQState(trackKey(qOpen),d.set);
   else if(d.quest)openQuest(d.quest);
   else if(d.mob)findMob(d.mob);
   else if(d.item)findItem(d.item);
@@ -954,7 +1021,7 @@ function route(){
   $('nav-map').setAttribute('aria-current',quests?'false':'page');$('nav-quests').setAttribute('aria-current',quests?'page':'false');
   document.title=quests?'Quests · Victoria Island':'Victoria Island Spawns';
   // the map was hidden, so the fold-out and pinned tooltip are placed again now it has a size
-  if(quests)renderQuests();else{if(openId)renderFold(false);if(!active)hide()}
+  if(quests)setQTab(qTab);else{if(openId)renderFold(false);if(!active)hide()}
 }
 addEventListener('hashchange',route);
 route();
