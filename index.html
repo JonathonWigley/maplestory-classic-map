@@ -299,6 +299,22 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .sklv li{display:flex;gap:8px;padding:3px 6px;border-radius:6px}
 .sklv li b{min-width:20px;color:var(--muted)}
 .sklv li.on{background:rgba(203,166,247,.2)}
+/* level-up pane in the Character sidebar */
+#cSide .tools{overflow-y:auto;min-height:0}
+.lvup{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:6px;font-size:.8rem}
+.lvup h3{margin:0;font:600 1rem var(--display)}
+.lvup h3 small{font:700 .72rem var(--body);color:var(--muted);margin-left:8px}
+.lvup .sm,.lvrow>span{color:var(--muted)}
+.lvadv{margin:0;font-weight:800;color:var(--t1)}
+.lvrow{display:grid;gap:3px}
+.lvrow>b{font:800 .66rem var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.lvrow ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.lvrow li{display:flex;align-items:center;gap:6px;padding:2px 4px;border-radius:6px;cursor:pointer}
+.lvrow li:hover,.lvrow li:focus-visible{background:var(--panel);outline:none}
+.lvrow li span:first-of-type{flex:1;min-width:0}
+.lvrow .ct{font-weight:800;font-variant-numeric:tabular-nums}
+.lvrow .ct.neg{color:var(--t3)}
+.lvrow summary{cursor:pointer;color:var(--muted);font-weight:800;padding:2px 4px}
 /* gear plan and shops */
 .gstep.on{box-shadow:inset 0 0 0 1px var(--accent)}
 .gslots{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px;padding:4px}
@@ -425,6 +441,7 @@ details.shop li.cheap b,.shitem li.cheap b{color:var(--t1)}
     <div class="side-head"><h2>Your character</h2><button class="icon-btn" id="cCloseSide" aria-label="Fold sidebar">‹</button></div>
     <div class="tools">
       <div class="charcard"></div>
+      <div id="cLvUp"></div>
       <div class="qlt" id="cTools"></div>
     </div>
     <p class="rank-sub" id="cCount"></p>
@@ -1390,10 +1407,33 @@ function setCTab(t){
 }
 function renderCharacter(){
   renderCharCards();
-  if(!CD){$('cTools').innerHTML='';$('cList').innerHTML=cdWait();loadCharData();return}
+  if(!CD){$('cTools').innerHTML='';$('cLvUp').innerHTML='';$('cList').innerHTML=cdWait();loadCharData();return}
   const c=activeChar();
   ({build:renderBuild,gear:renderGear})[cTab](c);
   renderCDetail(c);
+  renderLevelUp(c);
+}
+// what the plan spends on reaching the character's level, from the level before: AP, SP, a job advancement, and gear it opens up
+function renderLevelUp(c){
+  const L=planLv(c),P=L-1,chain=jobChain(c.path),maxL=maxPlanLv(c),h=[];
+  h.push(`<h3>Level up<small>${L<2?'Lv 1':`Lv ${P} → ${L}`}${charLv(c)>maxL?` · plans end at Lv ${maxL}`:''}</small></h3>`);
+  if(L<2){$('cLvUp').innerHTML=`<section class="lvup">${h[0]}<p class="sm">Nothing to spend until Lv 2. Set the character's level above to see that level up.</p></section>`;return}
+  const t=ADV.indexOf(L);if(t>0&&chain[t])h.push(`<p class="lvadv">Job advancement: ${esc(CLASSES[chain[t]].n)}</p>`);
+  const s1=statsAt(c,L),s0=statsAt(c,P),ap=STATS4.filter(k=>s1[k]!==s0[k]);
+  h.push(`<div class="lvrow"><b>AP</b><span>${ap.length?ap.map(k=>`+${s1[k]-s0[k]} ${k}`).join(' · '):'None planned'}</span></div>`);
+  // SP by job tier; a reset at this level shows as points taken back
+  const sp=[];
+  chain.forEach((slug,tt)=>{const run=stageRun(tt,stageOf(c,tt),maxL),a=allocAt(run,L),b=allocAt(run,P);
+    for(const id of new Set([...Object.keys(a),...Object.keys(b)])){const d=(a[id]||0)-(b[id]||0);if(d)sp.push([id,d])}});
+  h.push(`<div class="lvrow"><b>SP</b>${sp.length?`<ul>${sp.map(([id,d])=>`<li data-skill="${id}" role="button" tabindex="0">${skillIcon(id,22)}<span>${esc(CD.skills[id].n)}</span><span class="ct${d<0?' neg':''}">${d>0?'+':''}${d}</span></li>`).join('')}</ul>`:'<span>None planned</span>'}</div>`);
+  // gear the planned build can wear at this level and could not at the level before; the item db lists some items twice
+  const base=chain[1]||'',seen=new Set(),fresh=Object.entries(CD.equip).map(([id,it])=>({id,...it}))
+    .filter(it=>!canEquip(it,L,s1,base).length&&canEquip(it,P,s0,base).length&&!seen.has(it.s+it.n)&&seen.add(it.s+it.n))
+    .sort((x,y)=>GEAR_SLOTS.indexOf(x.s)-GEAR_SLOTS.indexOf(y.s)||x.n.localeCompare(y.n));
+  // an advancement opens up a lot of class gear, so past a few the rest fold away
+  const gli=it=>`<li data-item="${it.id}" role="button" tabindex="0">${itemIcon(it.g,22)}<span>${esc(it.n)}</span><span class="sm">${esc(it.c)}</span></li>`,FEW=6;
+  h.push(`<div class="lvrow"><b>New gear${fresh.length?` · ${fresh.length}`:''}</b>${fresh.length?`<ul>${fresh.slice(0,FEW).map(gli).join('')}</ul>${fresh.length>FEW?`<details><summary>${fresh.length-FEW} more</summary><ul>${fresh.slice(FEW).map(gli).join('')}</ul></details>`:''}`:'<span>Nothing new at this level</span>'}</div>`);
+  $('cLvUp').innerHTML=`<section class="lvup">${h.join('')}</section>`;
 }
 // the job advancements, picked tier by tier; a second job leads to one third job, so picking it picks both
 const kidsOf=p=>Object.keys(CLASSES).filter(k=>CLASSES[k].parent===p);
@@ -1615,6 +1655,11 @@ $('cTools').addEventListener('click',e=>{
   else if(b&&b.closest('#gSlot')){gSlot=b.dataset.k;renderCharacter()}
   else if(e.target.closest('[data-act="reset-all"]')){const c=activeChar();delete c.plans[c.path||'beginner'];saveChars();renderCharacter()}
 });
+$('cLvUp').addEventListener('click',e=>{
+  const r=e.target.closest('[data-skill],[data-item]');if(!r)return;
+  cDetail=r.dataset.skill?{k:'skill',id:r.dataset.skill}:{k:'item',id:r.dataset.item};renderCharacter();
+});
+$('cLvUp').addEventListener('keydown',e=>{const r=e.target.closest('[role="button"]');if(r&&(e.key==='Enter'||e.key===' ')){e.preventDefault();r.click()}});
 $('cBody').addEventListener('click',e=>{
   const c=activeChar();
   if(e.target.closest('[data-mob]')){findMob(e.target.closest('[data-mob]').dataset.mob);return}
