@@ -212,6 +212,12 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .qchar select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .qtabs{padding:0;margin-bottom:12px;border-bottom:1px solid var(--line)}
 .qtabs .tab{flex:none;padding:7px 18px}
+.btabs .tab{display:grid;line-height:1.15;text-align:left;padding:6px 16px}
+.btabs .tab small{font:800 .62rem var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.advpick{display:flex;flex-wrap:wrap;align-items:end;gap:8px}
+.advpick label{display:grid;gap:3px;flex:1;min-width:130px;font:800 .7rem var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.advpick label small{font-weight:700;letter-spacing:0;text-transform:none;margin-left:6px}
+.advpick .arr{color:var(--muted);padding-bottom:7px}
 .qvars{margin:0 0 4px 38px;border-left:2px solid var(--line);padding-left:6px}
 .qlt{display:grid;gap:8px}
 .qlt[hidden]{display:none}
@@ -1207,6 +1213,7 @@ document.addEventListener('click',e=>{
 let CD=null, cdErr=''; // data/character.json, loaded the first time the page opens
 let cTab=store.get('msc-char-tab','build'), cDetail=null; // cDetail: {k:'skill'|'item', id}
 if(cTab!=='build'&&cTab!=='gear')cTab='build'; // Shops was a tab here before it became its own page
+let bTab=null; // the Build tab open: a job tier, 'ap', or null for the tier the character's level is in
 let gMode=store.get('msc-gear-mode','next'), gSlot='all', gQuery='', gClass='', sQuery='';
 const ADV=[1,10,30,70], TIER_END=[10,30,70,120], SP_RESET_NX=7000;
 const CLOSED_TOWNS=new Set(['orbis','el-nath']); // shop areas meowdb marks as not open in this release
@@ -1388,21 +1395,36 @@ function renderCharacter(){
   ({build:renderBuild,gear:renderGear})[cTab](c);
   renderCDetail(c);
 }
+// the job advancements, picked tier by tier; a second job leads to one third job, so picking it picks both
+const kidsOf=p=>Object.keys(CLASSES).filter(k=>CLASSES[k].parent===p);
+function advPickHtml(c){
+  const chain=jobChain(c.path),N=['1st','2nd','3rd'];
+  return `<div class="advpick">${[1,2,3].map(t=>{const kids=chain[t-1]?kidsOf(chain[t-1]):[];
+    return `<label><span>${N[t-1]} job<small>Lv ${ADV[t]}</small></span><select class="csel" data-act="adv" data-t="${t}"${kids.length?'':' disabled'}><option value="">${kids.length?'Not chosen':'—'}</option>${kids.map(k=>`<option value="${k}"${chain[t]===k?' selected':''}>${esc(CLASSES[k].n)}</option>`).join('')}</select></label>`}).join('<span class="arr" aria-hidden="true">→</span>')}</div>`;
+}
 function renderBuild(c){
   const chain=jobChain(c.path),maxL=maxPlanLv(c),plan=planOf(c),L=planLv(c);
   $('cTools').innerHTML=`<p class="rank-sub">Showing the build at Lv ${L}${charLv(c)>maxL?` (plans end at Lv ${maxL})`:''} · change the level above to see another.</p>
     <button class="btn" data-act="reset-all" type="button">Reset this path to the suggested build</button>`;
   $('cCount').textContent=chain.length<2?'Pick a job path to plan skills past Beginner.':`${chain.map(s=>CLASSES[s].n).join(' → ')}`;
-  let h='';
-  // AP
+  let h=advPickHtml(c);
+  // tabs like the in-game skill window: one per job tier, plus AP; unpicked, the tab is the tier the character's level is in
+  const auto=chain.reduce((a,_,t)=>L>=ADV[t]?t:a,0),tab=bTab==='ap'||(bTab!=null&&bTab<chain.length)?bTab:auto;
+  const TIER=['Beginner','1st job','2nd job','3rd job'];
+  h+=`<div class="tabs qtabs btabs" role="tablist">${chain.map((slug,t)=>`<button class="tab" role="tab" data-act="btab" data-bt="${t}" aria-selected="${tab===t}" type="button"><small>${t?TIER[t]+' · ':''}Lv ${ADV[t]}</small>${esc(CLASSES[slug].n)}</button>`).join('')}
+    <button class="tab" role="tab" data-act="btab" data-bt="ap" aria-selected="${tab==='ap'}" type="button"><small>Stats</small>Ability points</button></div>`;
+  // AP: base stats always show; the per-level plan is on the AP tab
   const st=statsAt(c,L),segs=apSegments(c);
-  h+=`<section class="qarea"><h2>Ability points<small>base stats at Lv ${L}</small></h2><div class="qchain cstats">${STATS4.map(s=>`<div><b>${st[s]}</b><span>${s}</span></div>`).join('')}</div>
+  h+=`<section class="qarea"><div class="qchain cstats">${STATS4.map(s=>`<div><b>${st[s]}</b><span>${s}</span></div>`).join('')}</div>`;
+  if(tab==='ap')h+=`
     <div class="qchain"><div class="qchain-h">AP per level${plan.ap?' · edited':' · suggested'}</div>${segs.map((g,i)=>{
       const sum=STATS4.reduce((a,s)=>a+g.a[s],0);
       return `<div class="aprow${L>=g.from&&L<=g.to?' on':''}" data-seg="${i}"><span class="aplv">Lv ${g.from}${g.to>g.from?`–${g.to}`:''}</span>${STATS4.map(s=>`<label>${s}<input type="number" min="0" max="5" value="${g.a[s]}" data-ap="${s}"></label>`).join('')}
-        ${sum!==5?`<span class="qwhy">${sum} of 5 AP</span>`:''}${g.to>g.from?`<span class="apsplit"><input type="number" min="${g.from+1}" max="${g.to}" value="${Math.min(g.to,Math.max(g.from+1,L))}" aria-label="Split at level"><button class="lnk" data-act="ap-split" type="button">Split</button></span>`:''}</div>`}).join('')}</div></section>`;
-  // SP stages
+        ${sum!==5?`<span class="qwhy">${sum} of 5 AP</span>`:''}${g.to>g.from?`<span class="apsplit"><input type="number" min="${g.from+1}" max="${g.to}" value="${Math.min(g.to,Math.max(g.from+1,L))}" aria-label="Split at level"><button class="lnk" data-act="ap-split" type="button">Split</button></span>`:''}</div>`}).join('')}</div>`;
+  h+='</section>';
+  // SP for the open tier
   chain.forEach((slug,t)=>{
+    if(t!==tab)return;
     const st=stageOf(c,t),run=stageRun(t,st,maxL),now=allocAt(run,L),ids=CD.classSkills[slug]||[];
     const have=spAvail(t,L),used=Object.values(now).reduce((a,b)=>a+b,0),guide=guideOf(slug);
     h+=`<section class="qarea" data-stage="${t}"><h2>${esc(CLASSES[slug].n)}<small>${t?`from Lv ${ADV[t]} · `:''}${used} of ${have} SP used at Lv ${L}${plan.sp[t]?' · edited':''}</small></h2>`;
@@ -1552,6 +1574,7 @@ $('cList').addEventListener('click',e=>{
     else{for(let k=list.length-1;k>=0;k--)if(list[k][0]===id){if(--list[k][1]<=0)list.splice(k,1);break}}
     saveChars();renderCharacter();return;
   }
+  if(a==='btab'){const v=e.target.closest('[data-bt]').dataset.bt;bTab=v==='ap'?'ap':+v;renderCharacter();return}
   if(a==='variant'){const p=planOf(c);p.variant[t]=+e.target.closest('[data-v]').dataset.v;delete p.sp[t];saveChars();renderCharacter();return}
   if(a==='ap-split'){
     const row=e.target.closest('[data-seg]'),seg=apSegments(c)[+row.dataset.seg],at=+row.querySelector('.apsplit input').value;
@@ -1565,6 +1588,11 @@ $('cList').addEventListener('click',e=>{
 });
 $('cList').addEventListener('change',e=>{
   const c=activeChar();
+  if(e.target.dataset.act==='adv'){
+    const t=+e.target.dataset.t,chain=jobChain(c.path);let p=e.target.value||chain[t-1];
+    if(e.target.value)while(kidsOf(p).length===1)p=kidsOf(p)[0];
+    c.path=p;bTab=null;saveChars();charChanged();return;
+  }
   if(e.target.dataset.act==='sp-reset'){
     const t=+e.target.closest('[data-stage]').dataset.stage,st=editStage(c,t);
     st.reset=e.target.checked?{lv:ADV[t+1],steps:defaultResetSteps(c,t)}:null;if(!e.target.checked)st.after=[];
