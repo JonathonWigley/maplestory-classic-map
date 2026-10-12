@@ -75,6 +75,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--body);padding:16px;
 .cell{width:40px;height:40px;display:grid;place-items:center}
 /* map */
 .main{grid-column:2;min-width:0;display:grid;gap:10px}
+.app.solo .main{grid-column:2/4} /* a view with no details panel */
 header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
 h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wrap:balance}
 .sub{color:var(--muted);font-size:.85rem}
@@ -265,9 +266,6 @@ h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wra
 .qchar .btn.wide{justify-self:start}
 .csel{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font:700 .85rem var(--body)}
 /* build planner */
-.lvpick{display:flex;align-items:center;gap:10px}
-.lvpick input{flex:1;accent-color:var(--accent)}
-.lvpick output{font:800 .85rem var(--body);min-width:46px;text-align:right}
 .cstats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center;padding:8px}
 .cstats b{display:block;font:600 1.3rem var(--display)}
 .cstats span{font:800 .66rem var(--body);letter-spacing:.06em;color:var(--muted)}
@@ -336,7 +334,7 @@ details.shop li.cheap b,.shitem li.cheap b{color:var(--t1)}
 @keyframes ping{0%{transform:scale(1);opacity:1}100%{transform:scale(3.2);opacity:0}}
 @media (prefers-reduced-motion:reduce){.node.ping::after{animation:ping .9s ease-out 1}}
 /* wide screens: both panels always open, no fold controls */
-@media (min-width:821px){#closeSide,#foldRank,#qCloseSide,#qCloseDetail,#cCloseSide,#cCloseDetail,.open-side{display:none!important}.side[data-closed="true"]{display:flex}}
+@media (min-width:821px){#closeSide,#foldRank,#qCloseSide,#qCloseDetail,#cCloseSide,#cCloseDetail,#sCloseSide,.open-side{display:none!important}.side[data-closed="true"]{display:flex}}
 @media (max-width:1100px) and (min-width:821px){.app{grid-template-columns:290px minmax(0,1fr) 250px}}
 @media (max-width:820px){
   .rank{position:fixed;z-index:20;right:0;top:0;bottom:0;width:min(320px,86vw);max-height:none;border-radius:12px 0 0 12px;
@@ -351,7 +349,7 @@ details.shop li.cheap b,.shitem li.cheap b{color:var(--t1)}
 
 <nav class="topnav" aria-label="Site">
   <span class="brand">MapleStory Classic<small>Victoria Island</small></span>
-  <div class="navlinks"><a href="#map" id="nav-map" aria-current="page">Map</a><a href="#quests" id="nav-quests" aria-current="false">Quests</a><a href="#character" id="nav-character" aria-current="false">Character</a></div>
+  <div class="navlinks"><a href="#map" id="nav-map" aria-current="page">Map</a><a href="#quests" id="nav-quests" aria-current="false">Quests</a><a href="#character" id="nav-character" aria-current="false">Character</a><a href="#shops" id="nav-shops" aria-current="false">Shops</a></div>
 </nav>
 <div class="app" id="view-map">
   <aside class="side" id="side" data-closed="false" aria-label="Field guide">
@@ -434,7 +432,6 @@ details.shop li.cheap b,.shitem li.cheap b{color:var(--t1)}
     <div class="tabs qtabs" role="tablist">
       <button class="tab" role="tab" id="ctab-build" aria-selected="true">Build</button>
       <button class="tab" role="tab" id="ctab-gear" aria-selected="false">Gear</button>
-      <button class="tab" role="tab" id="ctab-shops" aria-selected="false">Shops</button>
     </div>
     <div class="qlist" id="cList"></div>
     <p class="foot">Skills, class guides, equipment, crafting and shop data from <a href="https://meowdb.com/msclassic/classes" target="_blank" rel="noopener">NiaMeowDB</a> (MapleStory Classic), pulled Oct 2026. Suggested builds follow its class guides (Lv 1-70); third-job skills are yours to plan. Characters and plans are saved in this browser only.</p>
@@ -443,6 +440,23 @@ details.shop li.cheap b,.shitem li.cheap b{color:var(--t1)}
     <div class="side-head"><h2 id="cTitle">Details</h2><button class="icon-btn" id="cCloseDetail" aria-label="Close details">›</button></div>
     <div class="qdet" id="cBody"></div>
   </aside>
+</div><div class="app solo" id="view-shops" hidden>
+  <aside class="side" id="sSide" data-closed="false" aria-label="Shop search">
+    <div class="side-head"><h2>Find supplies</h2><button class="icon-btn" id="sCloseSide" aria-label="Fold sidebar">‹</button></div>
+    <div class="tools">
+      <div class="qlt"><input id="sq" type="search" placeholder="Search items or shops" autocomplete="off" aria-label="Search items or shops"></div>
+    </div>
+    <p class="rank-sub" id="sCount"></p>
+  </aside>
+  <div class="main qmain">
+    <header>
+      <button class="icon-btn open-side" id="sOpenSide" aria-label="Open search">☰</button>
+      <h1>Shops</h1>
+      <span class="sub">Every NPC shop and what it sells · search for an item to find the cheapest seller</span>
+    </header>
+    <div class="qlist" id="sList"></div>
+    <p class="foot">Shop data from <a href="https://meowdb.com/msclassic/npc-shops" target="_blank" rel="noopener">NiaMeowDB</a> (MapleStory Classic), pulled Oct 2026. Prices are community-reported; the cheapest open seller of an item is highlighted.</p>
+  </div>
 </div>
 
 
@@ -1181,7 +1195,7 @@ document.addEventListener('input',e=>{
   const k=e.target.dataset?.cc;if(k!=='name'&&k!=='lv')return;
   activeChar()[k]=e.target.value;saveChars();syncChar();
   document.querySelectorAll('[data-cc="pick"] option:checked').forEach(o=>{o.textContent=activeChar().name||'Unnamed'});
-  if(k==='lv'){if(!$('view-quests').hidden)renderQuests();if(!$('view-char').hidden){cView=null;renderCharacter()}}
+  if(k==='lv'){if(!$('view-quests').hidden)renderQuests();if(!$('view-char').hidden)renderCharacter()}
 });
 document.addEventListener('click',e=>{
   if(e.target.dataset?.cc!=='del')return;
@@ -1189,17 +1203,21 @@ document.addEventListener('click',e=>{
   chars.list=chars.list.filter(x=>x.id!==chars.active);chars.active=chars.list[0].id;ccDelete=false;saveChars();charChanged();
 });
 
-// ---- Character page: build planner, gear guide and shops for the active character ----
+// ---- Character page: build planner and gear guide for the active character; the Shops page shares its data file ----
 let CD=null, cdErr=''; // data/character.json, loaded the first time the page opens
-let cTab=store.get('msc-char-tab','build'), cView=null, cDetail=null; // cView: the level being looked at; cDetail: {k:'skill'|'item'|'shop', id}
+let cTab=store.get('msc-char-tab','build'), cDetail=null; // cDetail: {k:'skill'|'item', id}
+if(cTab!=='build'&&cTab!=='gear')cTab='build'; // Shops was a tab here before it became its own page
 let gMode=store.get('msc-gear-mode','next'), gSlot='all', gQuery='', gClass='', sQuery='';
 const ADV=[1,10,30,70], TIER_END=[10,30,70,120], SP_RESET_NX=7000;
 const CLOSED_TOWNS=new Set(['orbis','el-nath']); // shop areas meowdb marks as not open in this release
 function loadCharData(){
   if(CD||cdErr)return;
   fetch('data/character.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
-    .then(d=>{CD=d;indexCharData();renderCharacter()}).catch(e=>{cdErr=String(e.message||e);renderCharacter()});
+    .then(d=>{CD=d;indexCharData();renderDataViews()}).catch(e=>{cdErr=String(e.message||e);renderDataViews()});
 }
+// the views that read the data file, redrawn when it arrives
+function renderDataViews(){if(!$('view-char').hidden)renderCharacter();if(!$('view-shops').hidden)renderShopPage()}
+const cdWait=()=>`<p class="empty-l">${cdErr?`Could not load the shop and equipment data (${esc(cdErr)}). Reload the page to try again.`:'Loading class, skill, equipment and shop data…'}</p>`;
 // lookups the page builds once from the data file
 let shopsOf={}, recipesOf={}, itemByName={}, shopPriceByName={};
 function indexCharData(){
@@ -1214,6 +1232,8 @@ function indexCharData(){
 function jobChain(path){const r=[];for(let p=path;p;p=CLASSES[p]?.parent)r.unshift(p);return r.length?r:['beginner']}
 const charLv=c=>Math.max(1,Math.min(200,+c.lv||1));
 function maxPlanLv(c){return TIER_END[jobChain(c.path).length-1]}
+// the level the build is shown at: the character's own level, up to where the plan ends
+const planLv=c=>Math.min(charLv(c),maxPlanLv(c));
 // SP a tier has by level L: Beginner 1 a level up to 10, later tiers 1 at the advancement and 3 a level up to the next one
 function spAvail(t,L){
   if(t===0)return Math.max(0,Math.min(L,10)-1);
@@ -1355,24 +1375,22 @@ const skillIcon=(id,size=32)=>`<img class="skico" src="skills/${id}.png" alt="" 
 const itemIcon=(gid,size=28)=>D.iconIdx[gid]!=null?art('ico',gid,size):`<img class="itico" src="icons/${gid}.png" alt="" width="${size}" height="${size}" loading="lazy">`;
 const meso=n=>n?`${n.toLocaleString('en-US')} mesos`:'—';
 const C_SUB={build:'Plan SP and AP level by level · the suggestion comes from the NiaMeowDB class guides; change anything',
-  gear:'Equipment for your class with where to buy, craft or farm it · plan a set for each level step',
-  shops:'Every NPC shop and what it sells · search for an item to find the cheapest seller'};
+  gear:'Equipment for your class with where to buy, craft or farm it · plan a set for each level step'};
 function setCTab(t){
   cTab=t;store.set('msc-char-tab',t);
-  for(const k of ['build','gear','shops'])$('ctab-'+k).setAttribute('aria-selected',k===t);
+  for(const k of ['build','gear'])$('ctab-'+k).setAttribute('aria-selected',k===t);
   $('cSub').textContent=C_SUB[t];renderCharacter();
 }
 function renderCharacter(){
   renderCharCards();
-  if(!CD){$('cTools').innerHTML='';$('cList').innerHTML=`<p class="empty-l">${cdErr?`Could not load the character data (${esc(cdErr)}). Reload the page to try again.`:'Loading class, skill and equipment data…'}</p>`;loadCharData();return}
-  const c=activeChar();if(cView==null)cView=Math.min(charLv(c),maxPlanLv(c));
-  ({build:renderBuild,gear:renderGear,shops:renderShops})[cTab](c);
+  if(!CD){$('cTools').innerHTML='';$('cList').innerHTML=cdWait();loadCharData();return}
+  const c=activeChar();
+  ({build:renderBuild,gear:renderGear})[cTab](c);
   renderCDetail(c);
 }
 function renderBuild(c){
-  const chain=jobChain(c.path),maxL=maxPlanLv(c),plan=planOf(c),L=Math.min(cView,maxL);
-  $('cTools').innerHTML=`<label class="qfl" for="cViewLv">Viewing level</label>
-    <div class="lvpick"><input id="cViewLv" type="range" min="1" max="${maxL}" value="${L}"><output>Lv ${L}</output></div>
+  const chain=jobChain(c.path),maxL=maxPlanLv(c),plan=planOf(c),L=planLv(c);
+  $('cTools').innerHTML=`<p class="rank-sub">Showing the build at Lv ${L}${charLv(c)>maxL?` (plans end at Lv ${maxL})`:''} · change the level above to see another.</p>
     <button class="btn" data-act="reset-all" type="button">Reset this path to the suggested build</button>`;
   $('cCount').textContent=chain.length<2?'Pick a job path to plan skills past Beginner.':`${chain.map(s=>CLASSES[s].n).join(' → ')}`;
   let h='';
@@ -1451,28 +1469,29 @@ function renderGear(c){
   }
   $('cList').innerHTML=h;
 }
-function renderShops(c){
-  $('cTools').innerHTML=`<input id="sq" type="search" placeholder="Search items or shops" autocomplete="off" value="${esc(sQuery)}">`;
+// ---- Shops page: every NPC shop, or every seller of the items a search names ----
+function renderShopPage(){
+  if(!CD){$('sCount').textContent='';$('sList').innerHTML=cdWait();loadCharData();return}
   const q=sQuery.trim().toLowerCase();let h='';
   if(q){
     // an item search lists every seller, cheapest first
     const hits={};CD.shops.forEach((s,i)=>s.items.forEach(([id,price,name,icon])=>{if(name.toLowerCase().includes(q))(hits[id]=hits[id]||{id,name,icon,sellers:[]}).sellers.push([i,price])}));
     const list=Object.values(hits).sort((a,b)=>a.name.localeCompare(b.name));
-    $('cCount').textContent=`${list.length} item${list.length===1?'':'s'} match`;
+    $('sCount').textContent=`${list.length} item${list.length===1?'':'s'} match`;
     h+=list.length?`<section class="qarea"><h2>Items<small>${list.length}</small></h2><div class="qchain">${list.map(x=>{x.sellers.sort((a,b)=>a[1]-b[1]);
       return `<div class="shitem"><div class="nm">${itemIcon(x.icon,24)} ${esc(x.name)}${potionText(x)}</div><ul>${x.sellers.map(([i,p],k)=>{const s=CD.shops[i];
         return `<li${k===0?' class="cheap"':''}><span>${esc(s.npc)} <small>${esc(s.fn)} · ${esc(s.region)}${CLOSED_TOWNS.has(s.town)?' · not open yet':''}</small></span><b>${meso(p)}</b>${shopMapBtn(s)}</li>`}).join('')}</ul></div>`}).join('')}</div></section>`:'';
   }
   const shops=CD.shops.map((s,i)=>({...s,i})).filter(s=>!q||s.npc.toLowerCase().includes(q)||s.region.toLowerCase().includes(q)||s.fn.toLowerCase().includes(q));
-  if(!q)$('cCount').textContent=`${shops.length} shops`;
+  if(!q)$('sCount').textContent=`${shops.length} shops`;
   const regions=[...new Set(shops.map(s=>s.region))];
   for(const r of regions){
     const rs=shops.filter(s=>s.region===r);
     h+=`<section class="qarea"><h2>${esc(r)}<small>${rs.length} shop${rs.length===1?'':'s'}${CLOSED_TOWNS.has(rs[0].town)?' · not open in this release':''}</small></h2><div class="qchain">${rs.map(s=>
-      `<details class="shop"${cDetail?.k==='shop'&&cDetail.id===s.i?' open':''}><summary><span class="nm">${esc(s.npc)}</span> <span class="sm">${esc(s.fn)} · ${s.items.length} items</span>${shopMapBtn(s)}</summary><ul>${s.items.map(([id,p,name,icon])=>
+      `<details class="shop"><summary><span class="nm">${esc(s.npc)}</span> <span class="sm">${esc(s.fn)} · ${s.items.length} items</span>${shopMapBtn(s)}</summary><ul>${s.items.map(([id,p,name,icon])=>
         `<li${shopsOf[id]?.[0]?.[0]===s.i&&shopsOf[id].length>1?' class="cheap" title="Cheapest seller"':''}>${itemIcon(icon,22)}<span>${esc(name)}${potionText({id,price:p})}</span><b>${meso(p)}</b></li>`).join('')}</ul></details>`).join('')}</div></section>`;
   }
-  $('cList').innerHTML=h||'<p class="empty-l">No shops match.</p>';
+  $('sList').innerHTML=h||'<p class="empty-l">No shops match.</p>';
 }
 // HP or MP restored per meso, for potions and food
 function potionText(x){
@@ -1488,7 +1507,7 @@ const shopMapBtn=s=>{const m=shopMap(s);return m?` <button class="lnk" data-map=
 function renderCDetail(c){
   const P=$('cDetail'),B=$('cBody');P.hidden=matchMedia('(max-width:820px)').matches&&!cDetail;
   if(!CD||!cDetail){$('cTitle').textContent='Details';B.innerHTML='<p class="rank-sub">Pick a skill or an item to see what it does and where to get it.</p>';return}
-  const L=Math.min(cView??charLv(c),maxPlanLv(c)),h=[];
+  const L=planLv(c),h=[];
   if(cDetail.k==='skill'){
     const s=CD.skills[cDetail.id],t=jobChain(c.path).indexOf(s.c),run=t>=0?stageRun(t,stageOf(c,t),maxPlanLv(c)):null,n=run?allocAt(run,L)[cDetail.id]||0:0;
     $('cTitle').textContent=s.n;
@@ -1560,9 +1579,7 @@ $('cList').addEventListener('change',e=>{
 });
 $('cList').addEventListener('keydown',e=>{const r=e.target.closest('.qrow,.gslot');if(r&&e.target===r&&(e.key==='Enter'||e.key===' ')){e.preventDefault();r.click()}});
 $('cTools').addEventListener('input',e=>{
-  if(e.target.id==='cViewLv'){cView=+e.target.value;renderCharacter();$('cViewLv')?.focus()}
-  else if(e.target.id==='gq'){gQuery=e.target.value;renderCharacter();const f=$('gq');f.focus();f.setSelectionRange(f.value.length,f.value.length)}
-  else if(e.target.id==='sq'){sQuery=e.target.value;renderCharacter();const f=$('sq');f.focus();f.setSelectionRange(f.value.length,f.value.length)}
+  if(e.target.id==='gq'){gQuery=e.target.value;renderCharacter();const f=$('gq');f.focus();f.setSelectionRange(f.value.length,f.value.length)}
 });
 $('cTools').addEventListener('change',e=>{if(e.target.id==='gClass'){gClass=e.target.value;renderCharacter()}});
 $('cTools').addEventListener('click',e=>{
@@ -1578,22 +1595,29 @@ $('cBody').addEventListener('click',e=>{
   if(e.target.closest('[data-find]')){findItem(e.target.closest('[data-item]').dataset.item);return}
   if(e.target.closest('[data-act="gear-add"]')){const it=CD.equip[cDetail.id],g=editGear(c),lv=$('gPlanLv').value;(g[lv]=g[lv]||{})[it.s]=cDetail.id;saveChars();renderCharacter()}
 });
-for(const k of ['build','gear','shops'])$('ctab-'+k).onclick=()=>setCTab(k);
+for(const k of ['build','gear'])$('ctab-'+k).onclick=()=>setCTab(k);
 const cSide=$('cSide');
 $('cCloseSide').onclick=()=>{cSide.dataset.closed='true'};
 $('cOpenSide').onclick=()=>{cSide.dataset.closed='false'};
 if(matchMedia('(max-width:820px)').matches)cSide.dataset.closed='true';
 $('cCloseDetail').onclick=()=>{cDetail=null;renderCharacter()};
+// Shops page events: the search box lives in the page markup, so typing keeps its focus
+$('sq').addEventListener('input',e=>{sQuery=e.target.value;renderShopPage()});
+$('sList').addEventListener('click',e=>{const b=e.target.closest('[data-map]');if(b){e.preventDefault();findMap(b.dataset.map)}});
+const sSide=$('sSide');
+$('sCloseSide').onclick=()=>{sSide.dataset.closed='true'};
+$('sOpenSide').onclick=()=>{sSide.dataset.closed='false'};
+if(matchMedia('(max-width:820px)').matches)sSide.dataset.closed='true';
 
-// ---- top navigation: #map, #quests and #character switch views ----
-const VIEWS={map:['view-map','Victoria Island Spawns'],quests:['view-quests','Quests · Victoria Island'],character:['view-char','Character · Victoria Island']};
+// ---- top navigation: #map, #quests, #character and #shops switch views ----
+const VIEWS={map:['view-map','Victoria Island Spawns'],quests:['view-quests','Quests · Victoria Island'],character:['view-char','Character · Victoria Island'],shops:['view-shops','Shops · Victoria Island']};
 function route(){
   const v=VIEWS[location.hash.slice(1)]?location.hash.slice(1):'map';
   for(const [k,[el]] of Object.entries(VIEWS)){$(el).hidden=k!==v;$('nav-'+k).setAttribute('aria-current',k===v?'page':'false')}
   document.title=VIEWS[v][1];
   renderCharCards();
   // the map was hidden, so the fold-out and pinned tooltip are placed again now it has a size
-  if(v==='quests')setQTab(qTab);else if(v==='character')setCTab(cTab);else{if(openId)renderFold(false);if(!active)hide()}
+  if(v==='quests')setQTab(qTab);else if(v==='character')setCTab(cTab);else if(v==='shops')renderShopPage();else{if(openId)renderFold(false);if(!active)hide()}
 }
 addEventListener('hashchange',route);
 route();
