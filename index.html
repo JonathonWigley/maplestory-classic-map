@@ -1213,7 +1213,7 @@ document.addEventListener('click',e=>{
 let CD=null, cdErr=''; // data/character.json, loaded the first time the page opens
 let cTab=store.get('msc-char-tab','build'), cDetail=null; // cDetail: {k:'skill'|'item', id}
 if(cTab!=='build'&&cTab!=='gear')cTab='build'; // Shops was a tab here before it became its own page
-let bTab=null; // the Build tab open: a job tier, 'ap', or null for the tier the character's level is in
+let bTab=null; // the Build tab open: a job tier, or null for the tier the character's level is in
 let gMode=store.get('msc-gear-mode','next'), gSlot='all', gQuery='', gClass='', sQuery='';
 const ADV=[1,10,30,70], TIER_END=[10,30,70,120], SP_RESET_NX=7000;
 const CLOSED_TOWNS=new Set(['orbis','el-nath']); // shop areas meowdb marks as not open in this release
@@ -1408,20 +1408,19 @@ function renderBuild(c){
     <button class="btn" data-act="reset-all" type="button">Reset this path to the suggested build</button>`;
   $('cCount').textContent=chain.length<2?'Pick a job path to plan skills past Beginner.':`${chain.map(s=>CLASSES[s].n).join(' → ')}`;
   let h=advPickHtml(c);
-  // tabs like the in-game skill window: one per job tier, plus AP; unpicked, the tab is the tier the character's level is in
-  const auto=chain.reduce((a,_,t)=>L>=ADV[t]?t:a,0),tab=bTab==='ap'||(bTab!=null&&bTab<chain.length)?bTab:auto;
-  const TIER=['Beginner','1st job','2nd job','3rd job'];
-  h+=`<div class="tabs qtabs btabs" role="tablist">${chain.map((slug,t)=>`<button class="tab" role="tab" data-act="btab" data-bt="${t}" aria-selected="${tab===t}" type="button"><small>${t?TIER[t]+' · ':''}Lv ${ADV[t]}</small>${esc(CLASSES[slug].n)}</button>`).join('')}
-    <button class="tab" role="tab" data-act="btab" data-bt="ap" aria-selected="${tab==='ap'}" type="button"><small>Stats</small>Ability points</button></div>`;
-  // AP: base stats always show; the per-level plan is on the AP tab
+  // AP: base stats and the per-level plan, above the skill tabs so they always show
   const st=statsAt(c,L),segs=apSegments(c);
-  h+=`<section class="qarea"><div class="qchain cstats">${STATS4.map(s=>`<div><b>${st[s]}</b><span>${s}</span></div>`).join('')}</div>`;
-  if(tab==='ap')h+=`
+  h+=`<section class="qarea"><h2>Ability points<small>base stats at Lv ${L}</small></h2><div class="qchain cstats">${STATS4.map(s=>`<div><b>${st[s]}</b><span>${s}</span></div>`).join('')}</div>`;
+  h+=`
     <div class="qchain"><div class="qchain-h">AP per level${plan.ap?' · edited':' · suggested'}</div>${segs.map((g,i)=>{
       const sum=STATS4.reduce((a,s)=>a+g.a[s],0);
       return `<div class="aprow${L>=g.from&&L<=g.to?' on':''}" data-seg="${i}"><span class="aplv">Lv ${g.from}${g.to>g.from?`–${g.to}`:''}</span>${STATS4.map(s=>`<label>${s}<input type="number" min="0" max="5" value="${g.a[s]}" data-ap="${s}"></label>`).join('')}
         ${sum!==5?`<span class="qwhy">${sum} of 5 AP</span>`:''}${g.to>g.from?`<span class="apsplit"><input type="number" min="${g.from+1}" max="${g.to}" value="${Math.min(g.to,Math.max(g.from+1,L))}" aria-label="Split at level"><button class="lnk" data-act="ap-split" type="button">Split</button></span>`:''}</div>`}).join('')}</div>`;
   h+='</section>';
+  // tabs like the in-game skill window: one per job tier; unpicked, the tab is the tier the character's level is in
+  const auto=chain.reduce((a,_,t)=>L>=ADV[t]?t:a,0),tab=bTab!=null&&bTab<chain.length?bTab:auto;
+  const TIER=['Beginner','1st job','2nd job','3rd job'];
+  h+=`<div class="tabs qtabs btabs" role="tablist">${chain.map((slug,t)=>`<button class="tab" role="tab" data-act="btab" data-bt="${t}" aria-selected="${tab===t}" type="button"><small>${t?TIER[t]+' · ':''}Lv ${ADV[t]}</small>${esc(CLASSES[slug].n)}</button>`).join('')}</div>`;
   // SP for the open tier
   chain.forEach((slug,t)=>{
     if(t!==tab)return;
@@ -1574,7 +1573,7 @@ $('cList').addEventListener('click',e=>{
     else{for(let k=list.length-1;k>=0;k--)if(list[k][0]===id){if(--list[k][1]<=0)list.splice(k,1);break}}
     saveChars();renderCharacter();return;
   }
-  if(a==='btab'){const v=e.target.closest('[data-bt]').dataset.bt;bTab=v==='ap'?'ap':+v;renderCharacter();return}
+  if(a==='btab'){const v=e.target.closest('[data-bt]').dataset.bt;bTab=+v;renderCharacter();return}
   if(a==='variant'){const p=planOf(c);p.variant[t]=+e.target.closest('[data-v]').dataset.v;delete p.sp[t];saveChars();renderCharacter();return}
   if(a==='ap-split'){
     const row=e.target.closest('[data-seg]'),seg=apSegments(c)[+row.dataset.seg],at=+row.querySelector('.apsplit input').value;
